@@ -1,0 +1,389 @@
+@import '~@fluentui/react/dist/sass/References.scss';
+
+.workflowItemsRequested {
+  overflow: hidden;
+  padding: 16px;
+  color: '[theme:bodyText, default: #323130]';
+  color: var(--bodyText);
+  font-family: 'Segoe UI', 'Segoe UI Web (West European)', 'Segoe UI',
+    -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif;
+
+  &.teams {
+    font-family: $ms-font-family-fallbacks;
+  }
+
+  // Webpart Header Section
+  .webpartHeader {
+    margin-bottom: 24px;
+    padding: 20px 0 16px 0;
+
+    h1 {
+      margin: 0;
+      color: #323130;
+      line-height: 1.2;
+    }
+
+    p {
+      margin: 8px 0 0 0;
+      line-height: 1.4;
+    }
+  }
+
+  // User Context Header Section
+  .userContext {
+    margin-bottom: 24px;
+
+    .userContextCard {
+      background: linear-gradient(135deg, #f8f9ff 0%, #e8f4ff 100%);
+      border: 1px solid #d1e7ff;
+      border-radius: 8px;
+      padding: 16px 20px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+      &:hover {
+        background: linear-gradient(135deg, #f0f6ff 0%, #e0f0ff 100%);
+        border-color: #b3d6ff;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        transition: all 0.2s ease-in-out;
+      }
+    }
+  }
+
+  // Legacy user context styling (for backward compatibility)
+  .userContext.legacy {
+    padding: 16px 0;
+    border-bottom: 1px solid #e1e1e1;
+
+    h1,
+    h2 {
+      margin: 0 0 8px 0;
+      font-size: 24px;
+      font-weight: 600;
+      color: #323130;
+      line-height: 1.2;
+    }
+
+    .roleText {
+      color: #605e5c;
+      font-size: 14px;
+      margin: 0;
+    }
+  }
+
+  // Command Bar Styling
+  :global(.ms-CommandBar) {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e1e1e1;
+    margin-bottom: 16px;
+
+    :global(.ms-CommandBar-primaryCommand) {
+      background-color: transparent;
+    }
+  }
+
+  // Unified Control Bar (custom)
+  .controlBar {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    margin-bottom: 16px;
+    background: #f8f9fa;
+    border: 1px solid #e1e1e1;
+    border-radius: 4px;
+    padding: 4px 8px;
+
+    .controlBarLeft,
+    .controlBarCenter,
+    .controlBarRight {
+      display: flex;
+      align-items: center;
+    }
+
+    .controlBarLeft {
+      flex: 0 0 auto;
+    }
+
+    .controlBarCenter {
+      flex: 1 1 auto;
+    }
+
+    .controlBarRight {
+      flex: 0 0 auto;
+    }
+
+    :global(.ms-SearchBox) {
+      width: 100%;
+    }
+  }
+
+  // DetailsList Customizations
+  :global(.ms-DetailsList) {
+    // Header styling
+    :global(.ms-DetailsHeader) {
+      background-color: #f8f9fa;
+      border-bottom: 2px solid #e1e1e1;
+
+      :global(.ms-DetailsHeader-cell) {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        font-size: 12px;
+        text-transform: uppercase;
+        color: #323130;
+        letter-spacing: 0.5px;
+
+        &:hover {
+          background-color: #f3f4f6;
+        }
+      }
+
+      :global(.ms-DetailsHeader-cellTitle) {
+        font-weight: 600;
+      }
+    }
+
+    // Row styling
+    :global(.ms-DetailsRow) {
+      border-bottom: 1px solid #f3f4f6;
+
+      &:hover {
+        background-color: #f8f9fa;
+      }
+
+      :global(.ms-DetailsRow-cell) {
+        padding: 12px 8px;
+        font-size: 14px;
+
+        // Status column styling
+        &[data-automation-key='workflowStatus'] {
+          font-weight: 600;
+        }
+      }
+    }
+
+    // Group Header styling for list grouping
+    :global(.ms-GroupHeader) {
+      background-color: #e8f4fd;
+      border-left: 4px solid #0078d4;
+      font-weight: 600;
+      color: #0078d4;
+
+      :global(.ms-GroupHeader-title) {
+        font-size: 16px;
+        font-weight: 600;
+        color: #0078d4;
+      }
+
+      :global(.ms-GroupHeader-expand) {
+        color: #0078d4;
+      }
+    }
+  }
+
+  // Status color coding
+  .statusCompleted {
+    color: #107c10;
+    font-weight: 600;
+  }
+
+  .statusInProgress {
+    color: #0078d4;
+    font-weight: 600;
+  }
+
+  .statusPending {
+    color: #ff8c00;
+    font-weight: 600;
+  }
+
+  .statusRejected {
+    color: #d13438;
+    font-weight: 600;
+  }
+
+  .statusCancelled {
+    color: #605e5c;
+    font-weight: 600;
+  }
+
+  // Loading and empty states
+  .loadingContainer {
+    text-align: center;
+    padding: 48px 24px;
+
+    .loadingSpinner {
+      margin-bottom: 16px;
+    }
+
+    .loadingText {
+      color: #605e5c;
+      font-size: 16px;
+    }
+  }
+
+  .emptyState {
+    text-align: center;
+    padding: 48px 24px;
+    color: #605e5c;
+
+    .emptyIcon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      color: #c7c7c7;
+    }
+
+    .emptyTitle {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #323130;
+    }
+
+    .emptyDescription {
+      font-size: 14px;
+      max-width: 400px;
+      margin: 0 auto;
+      line-height: 1.4;
+    }
+  }
+
+  // Error message styling
+  :global(.ms-MessageBar) {
+    margin-bottom: 16px;
+
+    &:global(.ms-MessageBar--error) {
+      background-color: #fdf2f2;
+      border-left: 4px solid #d13438;
+    }
+
+    &:global(.ms-MessageBar--warning) {
+      background-color: #fff8f0;
+      border-left: 4px solid #ff8c00;
+    }
+  }
+
+  // Filter button styling
+  .filterButton {
+    min-width: 24px;
+    height: 24px;
+    padding: 0;
+    background-color: transparent;
+    border: none;
+    color: #605e5c;
+
+    &:hover {
+      background-color: #f3f4f6;
+      color: #323130;
+    }
+
+    &.active {
+      background-color: #0078d4;
+      color: white;
+    }
+  }
+
+  // Responsive design
+  @media (max-width: 768px) {
+    padding: 8px;
+
+    .userContext {
+      margin-bottom: 16px;
+      padding: 12px 0;
+
+      h1,
+      h2 {
+        font-size: 20px;
+      }
+    }
+
+    :global(.ms-DetailsList) {
+      :global(.ms-DetailsRow-cell) {
+        padding: 8px 4px;
+        font-size: 12px;
+      }
+
+      :global(.ms-DetailsHeader-cell) {
+        font-size: 11px;
+      }
+    }
+  }
+}
+
+// Dark theme support
+[data-theme='dark'] .workflowItemsRequested {
+  color: #ffffff;
+
+  .userContext {
+    border-bottom-color: #484644;
+
+    h1,
+    h2 {
+      color: #ffffff;
+    }
+
+    .roleText {
+      color: #a19f9d;
+    }
+  }
+
+  :global(.ms-CommandBar) {
+    background-color: #292827;
+    border-bottom-color: #484644;
+  }
+
+  :global(.ms-DetailsList) {
+    :global(.ms-DetailsHeader) {
+      background-color: #292827;
+      border-bottom-color: #484644;
+
+      :global(.ms-DetailsHeader-cell) {
+        background-color: #292827;
+        color: #ffffff;
+
+        &:hover {
+          background-color: #323130;
+        }
+      }
+    }
+
+    :global(.ms-DetailsRow) {
+      border-bottom-color: #484644;
+
+      &:hover {
+        background-color: #292827;
+      }
+
+      :global(.ms-DetailsRow-cell) {
+        color: #ffffff;
+      }
+    }
+
+    :global(.ms-GroupHeader) {
+      background-color: #1b3951;
+      border-left-color: #479ef5;
+      color: #479ef5;
+
+      :global(.ms-GroupHeader-title) {
+        color: #479ef5;
+      }
+
+      :global(.ms-GroupHeader-expand) {
+        color: #479ef5;
+      }
+    }
+  }
+}
+
+// High contrast support
+@media (prefers-contrast: high) {
+  .workflowItemsRequested {
+    :global(.ms-DetailsList) {
+      :global(.ms-DetailsHeader-cell) {
+        border: 1px solid;
+      }
+
+      :global(.ms-DetailsRow-cell) {
+        border: 1px solid;
+      }
+    }
+  }
+}

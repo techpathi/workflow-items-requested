@@ -1,0 +1,19 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "workflow-items-requested-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/workflowItemsRequested/WorkflowItemsRequestedWebPart.js",
+          "manifest": "./src/webparts/workflowItemsRequested/WorkflowItemsRequestedWebPart.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {},
+  "localizedResources": {
+    "WorkflowItemsRequestedWebPartStrings": "lib/webparts/workflowItemsRequested/loc/{locale}.js",
+    "PropertyControlStrings": "node_modules/@pnp/spfx-property-controls/lib/loc/{locale}.js"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "workflow-items-requested-client-side-solution",
+    "id": "df1a5255-c00b-4610-8b43-7b8b4d473216",
+    "version": "1.0.0.0",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.21.1"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "workflow-items-requested description"
+      },
+      "longDescription": {
+        "default": "workflow-items-requested description"
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "workflow-items-requested Feature",
+        "description": "The feature that activates elements of the workflow-items-requested solution.",
+        "id": "3bd79290-a89a-4dec-8087-ded5762333a1",
+        "version": "1.0.0.0"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/workflow-items-requested.sppkg"
+  }
+}

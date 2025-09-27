@@ -1,0 +1,18 @@
+{
+  "@microsoft/generator-sharepoint": {
+    "plusBeta": false,
+    "isCreatingSolution": true,
+    "nodeVersion": "22.19.0",
+    "sdksVersions": {},
+    "version": "1.21.1",
+    "libraryName": "workflow-items-requested",
+    "libraryId": "df1a5255-c00b-4610-8b43-7b8b4d473216",
+    "environment": "spo",
+    "packageManager": "npm",
+    "solutionName": "workflow-items-requested",
+    "solutionShortDescription": "workflow-items-requested description",
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "componentType": "webpart"
+  }
+}
