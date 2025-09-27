@@ -236,18 +236,20 @@ class WorkflowItemsRequestedClass extends React.Component<
   private _buildColumns(): IColumn[] {
     const columns: IColumn[] = [];
 
-    // Title column (always visible)
+    // Title column (primary flexible column) - width will be recalculated after fixed columns
     columns.push({
       key: 'title',
       name: 'Title',
       fieldName: 'title',
-      minWidth: 200,
-      maxWidth: 300,
+      minWidth: 180,
+      maxWidth: 1000, // effectively flex; we will not cap strongly
       isResizable: true,
       isSorted: this.props.defaultSortColumn === 'title',
       isSortedDescending: this.props.defaultSortDirection === 'desc',
       onRender: (item: IWorkflowItemsRequestedItem) => (
-        <Text variant='medium'>{item.title}</Text>
+        <span className={styles.truncateCell} title={item.title}>
+          {item.title}
+        </span>
       ),
       onColumnClick: this._onColumnClick
     });
@@ -258,21 +260,20 @@ class WorkflowItemsRequestedClass extends React.Component<
         key: 'workflowStatus',
         name: 'Workflow Status',
         fieldName: 'workflowStatus',
-        minWidth: 120,
-        maxWidth: 150,
+        minWidth: 110,
+        maxWidth: 130,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <Text
-            variant='medium'
-            styles={{
-              root: {
-                color: this._getStatusColor(item.workflowStatus),
-                fontWeight: 600
-              }
+          <span
+            className={styles.truncateCell}
+            style={{
+              fontWeight: 600,
+              color: this._getStatusColor(item.workflowStatus)
             }}
+            title={item.workflowStatus}
           >
             {item.workflowStatus}
-          </Text>
+          </span>
         ),
         onColumnClick: this._onColumnClick
       });
@@ -284,11 +285,16 @@ class WorkflowItemsRequestedClass extends React.Component<
         key: 'creditManager',
         name: 'Credit Manager',
         fieldName: 'creditManager',
-        minWidth: 150,
-        maxWidth: 200,
+        minWidth: 110,
+        maxWidth: 160,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <Text variant='medium'>{item.creditManager || '-'}</Text>
+          <span
+            className={styles.truncateCell}
+            title={item.creditManager || '-'}
+          >
+            {item.creditManager || '-'}
+          </span>
         ),
         onColumnClick: this._onColumnClick
       });
@@ -300,11 +306,13 @@ class WorkflowItemsRequestedClass extends React.Component<
         key: 'dsr',
         name: 'DSR',
         fieldName: 'dsr',
-        minWidth: 150,
-        maxWidth: 200,
+        minWidth: 90,
+        maxWidth: 130,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <Text variant='medium'>{item.dsr || '-'}</Text>
+          <span className={styles.truncateCell} title={item.dsr || '-'}>
+            {item.dsr || '-'}
+          </span>
         ),
         onColumnClick: this._onColumnClick
       });
@@ -316,11 +324,16 @@ class WorkflowItemsRequestedClass extends React.Component<
         key: 'customerService',
         name: 'Customer Service',
         fieldName: 'customerService',
-        minWidth: 150,
-        maxWidth: 200,
+        minWidth: 110,
+        maxWidth: 170,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <Text variant='medium'>{item.customerService || '-'}</Text>
+          <span
+            className={styles.truncateCell}
+            title={item.customerService || '-'}
+          >
+            {item.customerService || '-'}
+          </span>
         ),
         onColumnClick: this._onColumnClick
       });
@@ -332,11 +345,16 @@ class WorkflowItemsRequestedClass extends React.Component<
         key: 'currentAssignedRole',
         name: 'Current Assigned Role',
         fieldName: 'currentAssignedRole',
-        minWidth: 150,
-        maxWidth: 200,
+        minWidth: 130,
+        maxWidth: 190,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <Text variant='medium'>{item.currentAssignedRole || '-'}</Text>
+          <span
+            className={styles.truncateCell}
+            title={item.currentAssignedRole || '-'}
+          >
+            {item.currentAssignedRole || '-'}
+          </span>
         ),
         onColumnClick: this._onColumnClick
       });
@@ -348,11 +366,16 @@ class WorkflowItemsRequestedClass extends React.Component<
         key: 'createdDate',
         name: 'Created Date',
         fieldName: 'createdDate',
-        minWidth: 120,
-        maxWidth: 150,
+        minWidth: 110,
+        maxWidth: 120,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <Text variant='medium'>{item.createdDate.toLocaleDateString()}</Text>
+          <span
+            className={styles.truncateCell}
+            title={item.createdDate.toLocaleDateString()}
+          >
+            {item.createdDate.toLocaleDateString()}
+          </span>
         ),
         onColumnClick: this._onColumnClick
       });
@@ -364,11 +387,16 @@ class WorkflowItemsRequestedClass extends React.Component<
         key: 'sourceListTitle',
         name: 'Source List',
         fieldName: 'sourceListTitle',
-        minWidth: 150,
-        maxWidth: 200,
+        minWidth: 130,
+        maxWidth: 190,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <Text variant='medium'>{item.sourceListTitle || 'Unknown'}</Text>
+          <span
+            className={styles.truncateCell}
+            title={item.sourceListTitle || 'Unknown'}
+          >
+            {item.sourceListTitle || 'Unknown'}
+          </span>
         ),
         onColumnClick: this._onColumnClick
       });
@@ -390,15 +418,20 @@ class WorkflowItemsRequestedClass extends React.Component<
             (cf.dateRange && (cf.dateRange.from || cf.dateRange.to)))
         );
 
+        // We intentionally do NOT call defaultRender because it already outputs the column name
+        // inside its own button, which was causing duplicated accessible text like
+        // "Title Filter Title". Instead we replicate only the label portion and keep the
+        // filter button outside of the label so the column header's accessible name remains
+        // just the column name.
         return (
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
               width: '100%',
               height: '100%',
-              padding: '0 4px'
+              padding: '0 4px',
+              gap: 4
             }}
             onClick={(ev: React.MouseEvent<HTMLElement>) => {
               if (props && props.onColumnClick) {
@@ -406,8 +439,21 @@ class WorkflowItemsRequestedClass extends React.Component<
               }
             }}
           >
-            <span style={{ flex: 1, cursor: 'pointer' }}>
-              {defaultRender ? defaultRender(props) : column.name}
+            <span
+              className={styles.headerTextTruncate}
+              title={column.name}
+              role='button'
+              aria-label={column.name}
+              // Keep tab focus behavior consistent with default header: allow focus via parent button semantics
+              onClick={(ev: React.MouseEvent<HTMLElement>) => {
+                // Sort trigger
+                if (props && props.onColumnClick) {
+                  props.onColumnClick(ev as any, props.column);
+                }
+              }}
+              style={{ flex: '1 1 auto', minWidth: 0 }}
+            >
+              {column.name}
             </span>
             <IconButton
               iconProps={{
@@ -430,7 +476,8 @@ class WorkflowItemsRequestedClass extends React.Component<
                   height: 24,
                   background: hasActiveFilter ? '#deecf9' : 'transparent',
                   borderRadius: 4,
-                  padding: 0
+                  padding: 0,
+                  flex: '0 0 auto'
                 },
                 rootHovered: {
                   background: hasActiveFilter ? '#c7e0f4' : '#f3f2f1'
@@ -480,9 +527,10 @@ class WorkflowItemsRequestedClass extends React.Component<
     let startIndex = 0;
 
     groupMap.forEach((groupItems, groupKey) => {
+      // IMPORTANT: Do not include the count in the name; DetailsList GroupHeader already appends count.
       groups.push({
         key: groupKey,
-        name: `${groupKey} (${groupItems.length})`,
+        name: groupKey,
         startIndex,
         count: groupItems.length,
         level: 0,
@@ -615,9 +663,45 @@ class WorkflowItemsRequestedClass extends React.Component<
         }));
       }
     }
-    this.setState({
-      activeFilterColumn: columnKey,
-      filterTargetRef: targetRef
+    // Cascading filters: rebuild the value list for this column from the CURRENT filtered + searched items
+    // excluding this column's own filter (so user can adjust it with full remaining domain)
+    this.setState(prev => {
+      const existingFilter = prev.filters[columnKey];
+      let baseItems = prev.workflowItems;
+      // Apply all other active filters first
+      const otherFilters: any = {};
+      Object.keys(prev.filters).forEach(k => {
+        if (k !== columnKey) {
+          otherFilters[k] = prev.filters[k];
+        }
+      });
+      baseItems = FilterUtils.applyFilters(baseItems, otherFilters);
+      // Apply current search text as well to keep consistency with visible list
+      baseItems = this._applySearch([...baseItems], prev.searchText);
+
+      // Rebuild checkbox value list if this column supports discrete values
+      let updatedFilter = existingFilter;
+      if (existingFilter && existingFilter.type === 'checkbox') {
+        const newValues = FilterUtils.extractColumnValues(
+          baseItems as any,
+          columnKey
+        );
+        // Preserve any selectedValues that might not appear (edge case)
+        const selectedValues = existingFilter.selectedValues || [];
+        const valueKeys = new Set(newValues.map(v => v.key));
+        selectedValues.forEach(sel => {
+          if (!valueKeys.has(sel)) {
+            newValues.push({ key: sel, text: sel, count: 0 });
+          }
+        });
+        updatedFilter = { ...existingFilter, values: newValues };
+      }
+
+      return {
+        filters: { ...prev.filters, [columnKey]: updatedFilter },
+        activeFilterColumn: columnKey,
+        filterTargetRef: targetRef
+      } as any;
     });
   };
 
@@ -821,7 +905,6 @@ class WorkflowItemsRequestedClass extends React.Component<
                       groupedItems: groups
                     });
                   }}
-                  styles={{ root: { width: '100%' } }}
                 />
               </div>
               <div className={styles.controlBarRight}>
