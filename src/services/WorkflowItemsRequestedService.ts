@@ -8,6 +8,13 @@ import '@pnp/sp/site-users/web';
 import '@pnp/graph/users';
 
 import { IWorkflowItemsRequestedItem, IUserRoleContext } from '../models';
+import {
+  SHAREPOINT_FIELDS,
+  USER_FIELD_MAPPINGS,
+  USER_FIELDS,
+  BASIC_SELECT_FIELDS,
+  getUserFieldExpansions
+} from '../constants';
 
 export class WorkflowItemsRequestedService {
   private _sp: SPFI;
@@ -109,7 +116,7 @@ export class WorkflowItemsRequestedService {
       // Check if list exists first (by title)
       const listExists = await this._sp.web.lists
         .getById(listId)
-        .select('Id', 'Title')()
+        .select(SHAREPOINT_FIELDS.SYSTEM.ID, SHAREPOINT_FIELDS.SYSTEM.TITLE)()
         .catch(() => null);
       if (!listExists) {
         console.log(
@@ -131,21 +138,8 @@ export class WorkflowItemsRequestedService {
         }))
       );
 
-      // Default internal names aligned with WorkflowRequestService
-      const defaultTitleField = 'Simple_x0020_Title';
-      const defaultWorkflowStatusField = 'Workflow_x0020_Status';
-      const defaultCreditManagerField = 'Credit_x0020_Manager';
-      const defaultDsrField = 'District_x0020_Sales_x0020_Repre';
-      const defaultCustomerServiceField = 'Customer_x0020_Service';
-      const defaultCurrentAssignedRoleField =
-        'Current_x0020_Assigned_x0020_Rol';
-
-      // Check if user fields exist in the list
-      const userFieldMappings = [
-        { internal: defaultCreditManagerField, display: 'Credit Manager' },
-        { internal: defaultDsrField, display: 'DSR' },
-        { internal: defaultCustomerServiceField, display: 'Customer Service' }
-      ];
+      // Check if user fields exist in the list using predefined mappings
+      const userFieldMappings = USER_FIELD_MAPPINGS;
 
       const availableUserFields = userFieldMappings.filter(mapping =>
         fields.some(f => f.InternalName === mapping.internal)
@@ -156,30 +150,15 @@ export class WorkflowItemsRequestedService {
         availableUserFields
       );
 
-      const select: string[] = [
-        'Id',
-        defaultTitleField,
-        // Also select Title as a fallback in case Simple Title is not present
-        'Title',
-        defaultWorkflowStatusField,
-        defaultCreditManagerField,
-        defaultDsrField,
-        defaultCustomerServiceField,
-        defaultCurrentAssignedRoleField,
-        'Created',
-        'Modified'
-      ];
+      const select: string[] = [...BASIC_SELECT_FIELDS];
 
       const expand: string[] = [];
-      const userFields = [
-        defaultCreditManagerField,
-        defaultDsrField,
-        defaultCustomerServiceField
-      ].filter(Boolean) as string[];
+      const userFields = USER_FIELDS.filter(Boolean) as string[];
 
       // Add user field expansions
       userFields.forEach(f => {
-        select.push(`${f}/Id`, `${f}/Title`, `${f}/EMail`, `${f}/Email`);
+        const expansions = getUserFieldExpansions(f);
+        select.push(...expansions);
         expand.push(f);
       });
 
@@ -202,18 +181,7 @@ export class WorkflowItemsRequestedService {
         );
         // Try with basic fields and raw user field values
         try {
-          const basicSelect = [
-            'Id',
-            defaultTitleField,
-            'Title',
-            defaultWorkflowStatusField,
-            defaultCreditManagerField,
-            defaultDsrField,
-            defaultCustomerServiceField,
-            defaultCurrentAssignedRoleField,
-            'Created',
-            'Modified'
-          ];
+          const basicSelect = [...BASIC_SELECT_FIELDS];
           raw = await this._sp.web.lists
             .getById(listId)
             .items.select(...basicSelect)();
@@ -232,13 +200,18 @@ export class WorkflowItemsRequestedService {
           // Final fallback with minimal fields
           raw = await this._sp.web.lists
             .getById(listId)
-            .items.select('Id', 'Title', 'Created', 'Modified')();
+            .items.select(
+              SHAREPOINT_FIELDS.SYSTEM.ID,
+              SHAREPOINT_FIELDS.SYSTEM.TITLE,
+              SHAREPOINT_FIELDS.SYSTEM.CREATED,
+              SHAREPOINT_FIELDS.SYSTEM.MODIFIED
+            )();
         }
       }
 
       const listInfo = await this._sp.web.lists
         .getById(listId)
-        .select('Id', 'Title')();
+        .select(SHAREPOINT_FIELDS.SYSTEM.ID, SHAREPOINT_FIELDS.SYSTEM.TITLE)();
       console.log(
         `WorkflowItemsRequestedService: Successfully loaded ${raw.length} items from list "${listId}"`
       );
@@ -266,15 +239,16 @@ export class WorkflowItemsRequestedService {
       return '';
     };
 
-    const titleField = 'Simple_x0020_Title';
-    const workflowStatusField = 'Workflow_x0020_Status';
-    const creditManagerField = 'Credit_x0020_Manager';
-    const dsrField = 'District_x0020_Sales_x0020_Repre';
-    const customerServiceField = 'Customer_x0020_Service';
-    const currentAssignedRoleField = 'Current_x0020_Assigned_x0020_Rol';
+    const titleField = SHAREPOINT_FIELDS.BASIC.SIMPLE_TITLE;
+    const workflowStatusField = SHAREPOINT_FIELDS.BASIC.WORKFLOW_STATUS;
+    const creditManagerField = SHAREPOINT_FIELDS.USERS.CREDIT_MANAGER;
+    const dsrField = SHAREPOINT_FIELDS.USERS.DSR;
+    const customerServiceField = SHAREPOINT_FIELDS.USERS.CUSTOMER_SERVICE;
+    const currentAssignedRoleField =
+      SHAREPOINT_FIELDS.BASIC.CURRENT_ASSIGNED_ROLE;
 
     // Debug logging for user fields
-    console.log(`Transform item ${item.Id}:`, {
+    console.log(`Transform item ${item[SHAREPOINT_FIELDS.SYSTEM.ID]}:`, {
       creditManager: item[creditManagerField],
       dsr: item[dsrField],
       customerService: item[customerServiceField],
@@ -282,21 +256,25 @@ export class WorkflowItemsRequestedService {
     });
 
     const transformed = {
-      id: String(item.Id),
-      title: item[titleField] || item.Simple_x0020_Title || item.Title || '',
+      id: String(item[SHAREPOINT_FIELDS.SYSTEM.ID]),
+      title:
+        item[titleField] ||
+        item[SHAREPOINT_FIELDS.BASIC.SIMPLE_TITLE] ||
+        item[SHAREPOINT_FIELDS.SYSTEM.TITLE] ||
+        '',
       workflowStatus: this._normalizeWorkflowStatus(item[workflowStatusField]),
       creditManager: getUser(item[creditManagerField]),
       dsr: getUser(item[dsrField]),
       customerService: getUser(item[customerServiceField]),
       currentAssignedRole: item[currentAssignedRoleField] || '',
-      createdDate: new Date(item.Created),
-      modifiedDate: new Date(item.Modified),
+      createdDate: new Date(item[SHAREPOINT_FIELDS.SYSTEM.CREATED]),
+      modifiedDate: new Date(item[SHAREPOINT_FIELDS.SYSTEM.MODIFIED]),
       sourceListTitle: listInfo.Title,
       sourceListId: listInfo.Id,
-      sourceItemId: item.Id
+      sourceItemId: item[SHAREPOINT_FIELDS.SYSTEM.ID]
     };
 
-    console.log(`Transformed item ${item.Id}:`, {
+    console.log(`Transformed item ${item[SHAREPOINT_FIELDS.SYSTEM.ID]}:`, {
       creditManager: transformed.creditManager,
       dsr: transformed.dsr,
       customerService: transformed.customerService
