@@ -34,7 +34,7 @@ export class FilterUtils {
   private static getColumnValue(
     item: IWorkflowItemsRequestedItem,
     columnKey: string
-  ): any {
+  ): string | Date | undefined {
     switch (columnKey) {
       case 'title':
         return item.title;
@@ -61,7 +61,7 @@ export class FilterUtils {
       case 'dueDate':
         return item.dueDate;
       default:
-        return null;
+        return undefined;
     }
   }
 
@@ -201,7 +201,7 @@ export class FilterUtils {
           cleared[key] = { ...f, selectedValues: [] };
           break;
         case 'date':
-          cleared[key] = { ...f, dateRange: {} } as any;
+          cleared[key] = { ...f, dateRange: {} };
           break;
         case 'text':
           cleared[key] = { ...f, textValue: '' };

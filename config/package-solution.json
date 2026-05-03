@@ -3,7 +3,7 @@
   "solution": {
     "name": "workflow-items-requested-client-side-solution",
     "id": "df1a5255-c00b-4610-8b43-7b8b4d473216",
-    "version": "1.0.0.0",
+    "version": "1.1.0.0",
     "includeClientSideAssets": true,
     "skipFeatureDeployment": true,
     "isDomainIsolated": false,

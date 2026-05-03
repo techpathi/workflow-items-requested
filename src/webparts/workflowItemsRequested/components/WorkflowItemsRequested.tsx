@@ -15,14 +15,38 @@ import {
   Text,
   IconButton,
   IGroup,
-  SearchBox
+  SearchBox,
+  Callout,
+  Checkbox,
+  DirectionalHint,
+  PrimaryButton,
+  DefaultButton
 } from '@fluentui/react';
 import type { IDetailsColumnProps } from '@fluentui/react';
-import { FilterOverlay } from '../../../components';
+import { FilterOverlay, IFilterConfig } from '../../../components';
 import { useServices } from '../../../contexts/ServiceContext';
 import { WorkflowItemsRequestedService } from '../../../services';
 import { FilterUtils, IColumnFilter } from '../../../utils';
 import { IWorkflowItemsRequestedItem, IUserRoleContext } from '../../../models';
+
+// Default fallback roles (used if no role definitions are provided)
+const BUILTIN_ROLES: { key: string; label: string }[] = [
+  { key: 'CM', label: 'CM (Credit Manager)' },
+  { key: 'DSR', label: 'DSR' },
+  { key: 'CUSTOMERSERVICE', label: 'Customer Service' },
+  { key: 'BUYER', label: 'Buyer' },
+  { key: 'EXECUTIVE', label: 'Executive' },
+  { key: 'GM', label: 'GM' },
+  { key: 'PRESIDENT', label: 'President' }
+];
+
+/** Returns the list of roles available for the user to choose from. */
+function getAvailableRoles(roleDefinitions?: { key: string; text: string }[]): { key: string; label: string }[] {
+  if (!roleDefinitions || roleDefinitions.length === 0) {
+    return BUILTIN_ROLES;
+  }
+  return roleDefinitions.map(r => ({ key: r.key, label: r.text }));
+}
 
 // Interface for component state
 interface IWorkflowItemsRequestedState {
@@ -34,6 +58,13 @@ interface IWorkflowItemsRequestedState {
   error?: string;
   warnings?: string[];
   userRoleContext?: IUserRoleContext;
+
+  // Session-overridden roles (undefined = use props.userRoles)
+  activeUserRoles: string[] | undefined;
+  // Role edit callout state
+  isRoleEditOpen: boolean;
+  roleEditDraft: string[]; // roles being edited in the callout before Apply
+  roleEditTargetId: string;
 
   // Filter state
   filters: IColumnFilter;
@@ -53,7 +84,6 @@ class WorkflowItemsRequestedClass extends React.Component<
 > {
   private _selection: Selection;
   private _workflowService?: WorkflowItemsRequestedService;
-  // no-op placeholder for legacy targeting; using event.currentTarget instead
 
   constructor(props: IWorkflowItemsRequestedPropsWithService) {
     super(props);
@@ -75,6 +105,10 @@ class WorkflowItemsRequestedClass extends React.Component<
       error: undefined,
       warnings: [],
       userRoleContext: undefined,
+      activeUserRoles: undefined,
+      isRoleEditOpen: false,
+      roleEditDraft: props.userRoles || [],
+      roleEditTargetId: 'role-edit-anchor',
       filters: {},
       activeFilterColumn: undefined,
       filterTargetRef: undefined,
@@ -92,7 +126,10 @@ class WorkflowItemsRequestedClass extends React.Component<
     // Reload data if workflow lists changed
     if (
       JSON.stringify(prevProps.workflowLists) !==
-      JSON.stringify(this.props.workflowLists)
+        JSON.stringify(this.props.workflowLists) ||
+      JSON.stringify(prevProps.sharePointFields) !==
+        JSON.stringify(this.props.sharePointFields) ||
+      prevProps.createdWithinDays !== this.props.createdWithinDays
     ) {
       await this._loadData();
     }
@@ -115,8 +152,7 @@ class WorkflowItemsRequestedClass extends React.Component<
       prevProps.showCurrentAssignedRole !==
         this.props.showCurrentAssignedRole ||
       prevProps.showCreatedDate !== this.props.showCreatedDate ||
-      (prevProps as any).showSourceList !==
-        (this.props as any).showSourceList ||
+      prevProps.showSourceList !== this.props.showSourceList ||
       prevProps.defaultSortColumn !== this.props.defaultSortColumn ||
       prevProps.defaultSortDirection !== this.props.defaultSortDirection
     ) {
@@ -152,42 +188,61 @@ class WorkflowItemsRequestedClass extends React.Component<
         this.props.workflowLists
       );
 
-      // Load workflow items
-      let items = await this._workflowService.getWorkflowItems(
-        this.props.workflowLists
-      );
+      // --- SERVER-SIDE ROLE FILTERING ---
+      // activeUserRoles (session override) takes priority over props.userRoles.
+      // This allows end-users to change their active roles without touching the property pane.
+      const effectiveRoles =
+        this.state.activeUserRoles !== undefined
+          ? this.state.activeUserRoles
+          : this.props.userRoles || [];
 
-      console.log(`Loaded ${items.length} workflow items`);
+      let roleFilter:
+        | {
+            userId: number;
+            roles: string[];
+            fieldConfig: typeof this.props.sharePointFields;
+          }
+        | undefined = undefined;
 
-      // Exclude items with no role (require currentAssignedRole non-empty)
-      items = items.filter(
-        it => it.currentAssignedRole && it.currentAssignedRole.trim().length > 0
-      );
-      console.log(
-        `After excluding items without roles: ${items.length} items remain`
-      );
-
-      // Get user role context
-      const userRoleContext = await this._workflowService.getUserRoleContext(
-        this.props.userRoles || []
-      );
-
-      // Apply role-based filtering if enabled
-      let filteredItems = items;
       if (
         this.props.enableRoleBasedFiltering &&
-        this.props.userRoles &&
-        this.props.userRoles.length > 0
+        effectiveRoles.length > 0
       ) {
-        filteredItems = await this._workflowService.filterItemsByUserRoles(
-          items,
-          this.props.userRoles,
-          userRoleContext.currentUser
-        );
+        const spUser = await this._workflowService['_sp'].web.currentUser();
+        const userId: number = spUser.Id;
+        const normalizedRoles = effectiveRoles
+          .map(r => r.toUpperCase().replace(/[^A-Z0-9]/g, ''))
+          .filter(r => r.length > 0);
+
         console.log(
-          `Applied role-based filtering: ${filteredItems.length} items remain`
+          `Server-side role filter: userId=${userId} | roles=[${normalizedRoles.join(', ')}]`
         );
+        roleFilter = {
+          userId,
+          roles: normalizedRoles,
+          fieldConfig: this.props.sharePointFields
+        };
       }
+
+      // Load workflow items – SharePoint applies the role filter server-side
+      const items = await this._workflowService.getWorkflowItems(
+        this.props.workflowLists,
+        this.props.sharePointFields,
+        this.props.createdWithinDays,
+        roleFilter
+      );
+
+      console.log(
+        `Loaded ${items.length} workflow items${roleFilter ? ' (server-side role filter applied)' : ''}`
+      );
+
+      // Get user role context – use effectiveRoles so "I am the..." reflects session overrides
+      const userRoleContext = await this._workflowService.getUserRoleContext(
+        effectiveRoles
+      );
+
+      // filteredItems = items returned from SharePoint (already filtered server-side)
+      const filteredItems = items;
 
       // Initialize filters for all columns
       const filterableColumns = [
@@ -210,16 +265,14 @@ class WorkflowItemsRequestedClass extends React.Component<
         filteredItems,
         filters
       );
+      const sortedItems = this._applyCurrentSorting(columnFilteredItems);
 
-      // Create groups if grouping is enabled
-      const groups = this.props.enableGrouping
-        ? this._createGroups(columnFilteredItems)
-        : [];
+      const groupedView = this._createGroupedView(sortedItems);
 
       this.setState({
-        workflowItems: items,
-        filteredItems: columnFilteredItems,
-        groupedItems: groups,
+        workflowItems: filteredItems,
+        filteredItems: groupedView.items,
+        groupedItems: groupedView.groups,
         userRoleContext,
         filters,
         isLoading: false
@@ -234,42 +287,47 @@ class WorkflowItemsRequestedClass extends React.Component<
   }
 
   private _buildColumns(): IColumn[] {
+    // Fluent UI justified mode distributes available horizontal space proportionally
+    // based on each column's maxWidth. Title gets a large maxWidth so it absorbs
+    // most of the spare space; secondary columns have smaller, content-appropriate
+    // maxWidths so they stay compact and readable.
+    //
+    // minWidth = the column will never shrink below this (scrollbar appears instead)
+    // maxWidth = how much of extra space this column can claim (higher = more space)
+
     const columns: IColumn[] = [];
 
-    // Title column (primary flexible column) - width will be recalculated after fixed columns
+    // Title – dominant column; absorbs most available width
     columns.push({
       key: 'title',
       name: 'Title',
       fieldName: 'title',
       minWidth: 180,
-      maxWidth: 1000, // effectively flex; we will not cap strongly
+      maxWidth: 800,
       isResizable: true,
       isSorted: this.props.defaultSortColumn === 'title',
       isSortedDescending: this.props.defaultSortDirection === 'desc',
       onRender: (item: IWorkflowItemsRequestedItem) => (
-        <span className={styles.truncateCell} title={item.title}>
+        <span className={styles.titleCell} title={item.title}>
           {item.title}
         </span>
       ),
       onColumnClick: this._onColumnClick
     });
 
-    // Workflow Status column
+    // Workflow Status – short values ("In Progress", "Completed")
     if (this.props.showWorkflowStatus) {
       columns.push({
         key: 'workflowStatus',
         name: 'Workflow Status',
         fieldName: 'workflowStatus',
         minWidth: 110,
-        maxWidth: 130,
+        maxWidth: 140,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
           <span
-            className={styles.truncateCell}
-            style={{
-              fontWeight: 600,
-              color: this._getStatusColor(item.workflowStatus)
-            }}
+            className={styles.wrapCell}
+            style={{ fontWeight: 600, color: this._getStatusColor(item.workflowStatus) }}
             title={item.workflowStatus}
           >
             {item.workflowStatus}
@@ -279,20 +337,17 @@ class WorkflowItemsRequestedClass extends React.Component<
       });
     }
 
-    // Credit Manager column
+    // Credit Manager – person name; header is 14 chars
     if (this.props.showCreditManager) {
       columns.push({
         key: 'creditManager',
         name: 'Credit Manager',
         fieldName: 'creditManager',
-        minWidth: 110,
+        minWidth: 120,
         maxWidth: 160,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <span
-            className={styles.truncateCell}
-            title={item.creditManager || '-'}
-          >
+          <span className={styles.wrapCell} title={item.creditManager || '-'}>
             {item.creditManager || '-'}
           </span>
         ),
@@ -300,17 +355,17 @@ class WorkflowItemsRequestedClass extends React.Component<
       });
     }
 
-    // DSR column
+    // DSR – person name; header is 3 chars
     if (this.props.showDSR) {
       columns.push({
         key: 'dsr',
         name: 'DSR',
         fieldName: 'dsr',
-        minWidth: 90,
-        maxWidth: 130,
+        minWidth: 110,
+        maxWidth: 150,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <span className={styles.truncateCell} title={item.dsr || '-'}>
+          <span className={styles.wrapCell} title={item.dsr || '-'}>
             {item.dsr || '-'}
           </span>
         ),
@@ -318,20 +373,17 @@ class WorkflowItemsRequestedClass extends React.Component<
       });
     }
 
-    // Customer Service column
+    // Customer Service – person name; header is 16 chars
     if (this.props.showCustomerService) {
       columns.push({
         key: 'customerService',
         name: 'Customer Service',
         fieldName: 'customerService',
-        minWidth: 110,
+        minWidth: 130,
         maxWidth: 170,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <span
-            className={styles.truncateCell}
-            title={item.customerService || '-'}
-          >
+          <span className={styles.wrapCell} title={item.customerService || '-'}>
             {item.customerService || '-'}
           </span>
         ),
@@ -339,20 +391,17 @@ class WorkflowItemsRequestedClass extends React.Component<
       });
     }
 
-    // Current Assigned Role column
+    // Current Assigned Role – longest header (21 chars); needs most room
     if (this.props.showCurrentAssignedRole) {
       columns.push({
         key: 'currentAssignedRole',
         name: 'Current Assigned Role',
         fieldName: 'currentAssignedRole',
-        minWidth: 130,
-        maxWidth: 190,
+        minWidth: 150,
+        maxWidth: 180,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <span
-            className={styles.truncateCell}
-            title={item.currentAssignedRole || '-'}
-          >
+          <span className={styles.wrapCell} title={item.currentAssignedRole || '-'}>
             {item.currentAssignedRole || '-'}
           </span>
         ),
@@ -360,20 +409,17 @@ class WorkflowItemsRequestedClass extends React.Component<
       });
     }
 
-    // Created Date column
+    // Created Date – fixed-format date string
     if (this.props.showCreatedDate) {
       columns.push({
         key: 'createdDate',
         name: 'Created Date',
         fieldName: 'createdDate',
-        minWidth: 110,
+        minWidth: 100,
         maxWidth: 120,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <span
-            className={styles.truncateCell}
-            title={item.createdDate.toLocaleDateString()}
-          >
+          <span className={styles.wrapCell} title={item.createdDate.toLocaleDateString()}>
             {item.createdDate.toLocaleDateString()}
           </span>
         ),
@@ -381,20 +427,17 @@ class WorkflowItemsRequestedClass extends React.Component<
       });
     }
 
-    // Source List column
+    // Source List – list name
     if (this.props.showSourceList) {
       columns.push({
         key: 'sourceListTitle',
         name: 'Source List',
         fieldName: 'sourceListTitle',
-        minWidth: 130,
-        maxWidth: 190,
+        minWidth: 110,
+        maxWidth: 160,
         isResizable: true,
         onRender: (item: IWorkflowItemsRequestedItem) => (
-          <span
-            className={styles.truncateCell}
-            title={item.sourceListTitle || 'Unknown'}
-          >
+          <span className={styles.wrapCell} title={item.sourceListTitle || 'Unknown'}>
             {item.sourceListTitle || 'Unknown'}
           </span>
         ),
@@ -448,7 +491,7 @@ class WorkflowItemsRequestedClass extends React.Component<
               onClick={(ev: React.MouseEvent<HTMLElement>) => {
                 // Sort trigger
                 if (props && props.onColumnClick) {
-                  props.onColumnClick(ev as any, props.column);
+                  props.onColumnClick(ev, props.column);
                 }
               }}
               style={{ flex: '1 1 auto', minWidth: 0 }}
@@ -511,7 +554,14 @@ class WorkflowItemsRequestedClass extends React.Component<
     }
   }
 
-  private _createGroups(items: IWorkflowItemsRequestedItem[]): IGroup[] {
+  private _createGroupedView(items: IWorkflowItemsRequestedItem[]): {
+    items: IWorkflowItemsRequestedItem[];
+    groups: IGroup[];
+  } {
+    if (!this.props.enableGrouping) {
+      return { items, groups: [] };
+    }
+
     // Group by source list title
     const groupMap = new Map<string, IWorkflowItemsRequestedItem[]>();
 
@@ -523,23 +573,23 @@ class WorkflowItemsRequestedClass extends React.Component<
       groupMap.get(groupKey)!.push(item);
     });
 
+    const groupedItems: IWorkflowItemsRequestedItem[] = [];
     const groups: IGroup[] = [];
-    let startIndex = 0;
 
     groupMap.forEach((groupItems, groupKey) => {
       // IMPORTANT: Do not include the count in the name; DetailsList GroupHeader already appends count.
       groups.push({
         key: groupKey,
         name: groupKey,
-        startIndex,
+        startIndex: groupedItems.length,
         count: groupItems.length,
         level: 0,
         isCollapsed: false
       });
-      startIndex += groupItems.length;
+      groupedItems.push(...groupItems);
     });
 
-    return groups;
+    return { items: groupedItems, groups };
   }
 
   private _onColumnClick = (
@@ -569,14 +619,12 @@ class WorkflowItemsRequestedClass extends React.Component<
       column.key!,
       currColumn.isSortedDescending!
     );
-    const groups = this.props.enableGrouping
-      ? this._createGroups(sortedItems)
-      : [];
+    const groupedView = this._createGroupedView(sortedItems);
 
     this.setState({
       columns: newColumns,
-      filteredItems: sortedItems,
-      groupedItems: groups
+      filteredItems: groupedView.items,
+      groupedItems: groupedView.groups
     });
   };
 
@@ -586,44 +634,8 @@ class WorkflowItemsRequestedClass extends React.Component<
     isSortedDescending: boolean
   ): IWorkflowItemsRequestedItem[] {
     return items.slice().sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
-
-      switch (columnKey) {
-        case 'title':
-          aValue = a.title;
-          bValue = b.title;
-          break;
-        case 'workflowStatus':
-          aValue = a.workflowStatus;
-          bValue = b.workflowStatus;
-          break;
-        case 'creditManager':
-          aValue = a.creditManager;
-          bValue = b.creditManager;
-          break;
-        case 'dsr':
-          aValue = a.dsr;
-          bValue = b.dsr;
-          break;
-        case 'customerService':
-          aValue = a.customerService;
-          bValue = b.customerService;
-          break;
-        case 'currentAssignedRole':
-          aValue = a.currentAssignedRole;
-          bValue = b.currentAssignedRole;
-          break;
-        case 'createdDate':
-          aValue = a.createdDate;
-          bValue = b.createdDate;
-          break;
-        default:
-          return 0;
-      }
-
-      if (aValue === null || aValue === undefined) aValue = '';
-      if (bValue === null || bValue === undefined) bValue = '';
+      const aValue = this._getSortValue(a, columnKey);
+      const bValue = this._getSortValue(b, columnKey);
 
       if (aValue < bValue) {
         return isSortedDescending ? 1 : -1;
@@ -635,6 +647,30 @@ class WorkflowItemsRequestedClass extends React.Component<
     });
   }
 
+  private _getSortValue(
+    item: IWorkflowItemsRequestedItem,
+    columnKey: string
+  ): string | number {
+    switch (columnKey) {
+      case 'title':
+        return item.title || '';
+      case 'workflowStatus':
+        return item.workflowStatus || '';
+      case 'creditManager':
+        return item.creditManager || '';
+      case 'dsr':
+        return item.dsr || '';
+      case 'customerService':
+        return item.customerService || '';
+      case 'currentAssignedRole':
+        return item.currentAssignedRole || '';
+      case 'createdDate':
+        return item.createdDate ? item.createdDate.getTime() : 0;
+      default:
+        return '';
+    }
+  }
+
   private _getColumnName(columns: IColumn[], columnKey: string): string {
     for (let i = 0; i < columns.length; i++) {
       if (columns[i].key === columnKey) {
@@ -644,15 +680,18 @@ class WorkflowItemsRequestedClass extends React.Component<
     return columnKey;
   }
 
-  private _onFilterColumnClick = (columnKey: string, event: any): void => {
+  private _onFilterColumnClick = (
+    columnKey: string,
+    event: React.MouseEvent<HTMLElement>
+  ): void => {
     event.stopPropagation();
     const targetRef: React.RefObject<HTMLElement> = {
-      current: event.currentTarget as HTMLElement
-    } as any;
+      current: event.currentTarget
+    };
 
     // Migration: if title filter previously stored as text, upgrade to checkbox config
     if (columnKey === 'title') {
-      const existing = this.state.filters['title'];
+      const existing = this.state.filters.title;
       if (existing && existing.type === 'text') {
         const upgraded = FilterUtils.getColumnFilterConfig(
           'title',
@@ -669,7 +708,7 @@ class WorkflowItemsRequestedClass extends React.Component<
       const existingFilter = prev.filters[columnKey];
       let baseItems = prev.workflowItems;
       // Apply all other active filters first
-      const otherFilters: any = {};
+      const otherFilters: IColumnFilter = {};
       Object.keys(prev.filters).forEach(k => {
         if (k !== columnKey) {
           otherFilters[k] = prev.filters[k];
@@ -680,12 +719,11 @@ class WorkflowItemsRequestedClass extends React.Component<
       baseItems = this._applySearch([...baseItems], prev.searchText);
 
       // Rebuild checkbox value list if this column supports discrete values
-      let updatedFilter = existingFilter;
+      let updatedFilter =
+        existingFilter ||
+        FilterUtils.getColumnFilterConfig(columnKey, baseItems);
       if (existingFilter && existingFilter.type === 'checkbox') {
-        const newValues = FilterUtils.extractColumnValues(
-          baseItems as any,
-          columnKey
-        );
+        const newValues = FilterUtils.extractColumnValues(baseItems, columnKey);
         // Preserve any selectedValues that might not appear (edge case)
         const selectedValues = existingFilter.selectedValues || [];
         const valueKeys = new Set(newValues.map(v => v.key));
@@ -701,7 +739,7 @@ class WorkflowItemsRequestedClass extends React.Component<
         filters: { ...prev.filters, [columnKey]: updatedFilter },
         activeFilterColumn: columnKey,
         filterTargetRef: targetRef
-      } as any;
+      };
     });
   };
 
@@ -712,7 +750,10 @@ class WorkflowItemsRequestedClass extends React.Component<
     });
   };
 
-  private _onFilterApply = (columnKey: string, config: any): void => {
+  private _onFilterApply = (
+    columnKey: string,
+    config: IFilterConfig
+  ): void => {
     const newFilters = FilterUtils.updateColumnFilter(
       this.state.filters,
       columnKey,
@@ -725,14 +766,12 @@ class WorkflowItemsRequestedClass extends React.Component<
     );
     filteredItems = this._applySearch(filteredItems, this.state.searchText);
     filteredItems = this._applyCurrentSorting(filteredItems);
-    const groups = this.props.enableGrouping
-      ? this._createGroups(filteredItems)
-      : [];
+    const groupedView = this._createGroupedView(filteredItems);
 
     this.setState({
       filters: newFilters,
-      filteredItems,
-      groupedItems: groups
+      filteredItems: groupedView.items,
+      groupedItems: groupedView.groups
     });
   };
 
@@ -790,7 +829,9 @@ class WorkflowItemsRequestedClass extends React.Component<
 
   /** Refresh data (used by refresh button in unified control bar) */
   private _onRefresh = (): void => {
-    void this._loadData();
+    this._loadData().catch(error => {
+      console.error('Error refreshing workflow items:', error);
+    });
   };
 
   /** Clear all active filters and search */
@@ -803,11 +844,11 @@ class WorkflowItemsRequestedClass extends React.Component<
     const searchText = '';
     const afterSearch = this._applySearch(filteredItems, searchText);
     const sorted = this._applyCurrentSorting(afterSearch);
-    const groups = this.props.enableGrouping ? this._createGroups(sorted) : [];
+    const groupedView = this._createGroupedView(sorted);
     this.setState({
       filters: clearedFilters,
-      filteredItems: sorted,
-      groupedItems: groups,
+      filteredItems: groupedView.items,
+      groupedItems: groupedView.groups,
       searchText
     });
   };
@@ -853,26 +894,115 @@ class WorkflowItemsRequestedClass extends React.Component<
         </div>
 
         {/* User Context Header */}
-        {this.props.showUserContext &&
-          userRoleContext &&
-          userRoleContext.displayText && (
-            <div className={styles.userContext}>
-              <div className={styles.userContextCard}>
+        {this.props.showUserContext && userRoleContext && userRoleContext.displayText && (
+          <div className={styles.userContext}>
+            <div className={styles.userContextCard}>
+              {/* Row: "I am the …" text + optional edit icon */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Text
+                  id={this.state.roleEditTargetId}
                   variant='large'
-                  styles={{
-                    root: {
-                      fontWeight: 600,
-                      marginBottom: 4,
-                      color: '#0078d4'
-                    }
-                  }}
+                  styles={{ root: { fontWeight: 600, color: '#0078d4' } }}
                 >
                   {userRoleContext.displayText}
                 </Text>
+
+                {/* Edit icon — only shown when the web-part allows user editing */}
+                {this.props.allowUserRoleEdit && (
+                  <IconButton
+                    id={`${this.state.roleEditTargetId}-btn`}
+                    iconProps={{ iconName: 'Edit' }}
+                    title='Edit my active roles'
+                    ariaLabel='Edit active roles'
+                    styles={{
+                      root: {
+                        width: 28,
+                        height: 28,
+                        borderRadius: 4,
+                        color: '#0078d4'
+                      },
+                      rootHovered: { background: '#deecf9' }
+                    }}
+                    onClick={() => {
+                      // Open callout; pre-populate draft with currently active roles
+                      const current =
+                        this.state.activeUserRoles !== undefined
+                          ? this.state.activeUserRoles
+                          : this.props.userRoles || [];
+                      this.setState({
+                        isRoleEditOpen: true,
+                        roleEditDraft: [...current]
+                      });
+                    }}
+                  />
+                )}
               </div>
+
+              {/* Role edit Callout */}
+              {this.state.isRoleEditOpen && (
+                <Callout
+                  target={`#${this.state.roleEditTargetId}-btn`}
+                  directionalHint={DirectionalHint.bottomLeftEdge}
+                  onDismiss={() => this.setState({ isRoleEditOpen: false })}
+                  styles={{
+                    root: { padding: 16, minWidth: 240, maxWidth: 320 }
+                  }}
+                  setInitialFocus
+                >
+                  <Text
+                    variant='mediumPlus'
+                    styles={{ root: { fontWeight: 600, marginBottom: 12, display: 'block' } }}
+                  >
+                    My Active Roles
+                  </Text>
+
+                  <Stack tokens={{ childrenGap: 8 }} styles={{ root: { marginBottom: 16 } }}>
+                    {getAvailableRoles(this.props.roleDefinitions).map(role => (
+                      <Checkbox
+                        key={role.key}
+                        label={role.label}
+                        checked={this.state.roleEditDraft.indexOf(role.key) !== -1}
+                        onChange={(_ev, checked) => {
+                          const draft = [...this.state.roleEditDraft];
+                          const idx = draft.indexOf(role.key);
+                          if (checked && idx === -1) draft.push(role.key);
+                          else if (!checked && idx !== -1) draft.splice(idx, 1);
+                          this.setState({ roleEditDraft: draft });
+                        }}
+                      />
+                    ))}
+                  </Stack>
+
+                  <Stack horizontal tokens={{ childrenGap: 8 }}>
+                    <PrimaryButton
+                      text='Apply'
+                      onClick={() => {
+                        this.setState(
+                          { activeUserRoles: [...this.state.roleEditDraft], isRoleEditOpen: false },
+                          () => this._loadData()
+                        );
+                      }}
+                    />
+                    <DefaultButton
+                      text='Cancel'
+                      onClick={() => this.setState({ isRoleEditOpen: false })}
+                    />
+                    <DefaultButton
+                      text='Reset'
+                      title='Reset to property pane defaults'
+                      onClick={() => {
+                        this.setState(
+                          { activeUserRoles: undefined, isRoleEditOpen: false },
+                          () => this._loadData()
+                        );
+                      }}
+                    />
+                  </Stack>
+                </Callout>
+              )}
             </div>
-          )}
+          </div>
+        )}
 
         {/* Unified Control Bar (Clear All | Search | Refresh) */}
         {(() => {
@@ -896,13 +1026,11 @@ class WorkflowItemsRequestedClass extends React.Component<
                     );
                     filtered = this._applySearch(filtered, searchText);
                     filtered = this._applyCurrentSorting(filtered);
-                    const groups = this.props.enableGrouping
-                      ? this._createGroups(filtered)
-                      : [];
+                    const groupedView = this._createGroupedView(filtered);
                     this.setState({
                       searchText,
-                      filteredItems: filtered,
-                      groupedItems: groups
+                      filteredItems: groupedView.items,
+                      groupedItems: groupedView.groups
                     });
                   }}
                 />
@@ -990,7 +1118,9 @@ class WorkflowItemsRequestedClass extends React.Component<
             target={filterTargetRef}
             isVisible={true}
             onDismiss={this._onFilterDismiss}
-            onApply={(cfg: any) => this._onFilterApply(activeFilterColumn, cfg)}
+            onApply={(cfg: IFilterConfig) =>
+              this._onFilterApply(activeFilterColumn, cfg)
+            }
             onClear={() => this._onFilterClear(activeFilterColumn)}
             columnKey={activeFilterColumn}
             columnName={this._getColumnName(columns, activeFilterColumn)}

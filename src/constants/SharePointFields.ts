@@ -1,9 +1,6 @@
 /**
  * SharePoint Internal Field Names for Workflow Items
  * These constants centralize all field references used across the solution
- *
- * Note: SharePoint internal names use x0020 to represent spaces in field names
- * Example: "Simple Title" becomes "Simple_x0020_Title"
  */
 
 /**
@@ -24,8 +21,6 @@ export const SHAREPOINT_FIELDS = {
 
   // Basic Workflow Fields - Core workflow-related fields
   BASIC: {
-    /** Simple Title field for workflow items */
-    SIMPLE_TITLE: 'Simple_x0020_Title',
     /** Workflow Status choice field */
     WORKFLOW_STATUS: 'Workflow_x0020_Status',
     /** Current Assigned Role text field */
@@ -43,6 +38,81 @@ export const SHAREPOINT_FIELDS = {
   }
 } as const;
 
+export interface ISharePointFieldConfig {
+  id: string;
+  title: string;
+  created: string;
+  modified: string;
+  workflowStatus: string;
+  currentAssignedRole: string;
+  creditManager: string;
+  dsr: string;
+  customerService: string;
+}
+
+export const DEFAULT_SHAREPOINT_FIELD_CONFIG: ISharePointFieldConfig = {
+  id: SHAREPOINT_FIELDS.SYSTEM.ID,
+  title: SHAREPOINT_FIELDS.SYSTEM.TITLE,
+  created: SHAREPOINT_FIELDS.SYSTEM.CREATED,
+  modified: SHAREPOINT_FIELDS.SYSTEM.MODIFIED,
+  workflowStatus: SHAREPOINT_FIELDS.BASIC.WORKFLOW_STATUS,
+  currentAssignedRole: SHAREPOINT_FIELDS.BASIC.CURRENT_ASSIGNED_ROLE,
+  creditManager: SHAREPOINT_FIELDS.USERS.CREDIT_MANAGER,
+  dsr: SHAREPOINT_FIELDS.USERS.DSR,
+  customerService: SHAREPOINT_FIELDS.USERS.CUSTOMER_SERVICE
+};
+
+const getConfiguredFieldName = (
+  configuredValue: string | undefined,
+  defaultValue: string
+): string => {
+  const trimmedValue = (configuredValue || '').trim();
+  return trimmedValue || defaultValue;
+};
+
+export const getSharePointFieldConfig = (
+  configuredFields?: Partial<ISharePointFieldConfig>
+): ISharePointFieldConfig => {
+  return {
+    id: getConfiguredFieldName(
+      configuredFields && configuredFields.id,
+      DEFAULT_SHAREPOINT_FIELD_CONFIG.id
+    ),
+    title: getConfiguredFieldName(
+      configuredFields && configuredFields.title,
+      DEFAULT_SHAREPOINT_FIELD_CONFIG.title
+    ),
+    created: getConfiguredFieldName(
+      configuredFields && configuredFields.created,
+      DEFAULT_SHAREPOINT_FIELD_CONFIG.created
+    ),
+    modified: getConfiguredFieldName(
+      configuredFields && configuredFields.modified,
+      DEFAULT_SHAREPOINT_FIELD_CONFIG.modified
+    ),
+    workflowStatus: getConfiguredFieldName(
+      configuredFields && configuredFields.workflowStatus,
+      DEFAULT_SHAREPOINT_FIELD_CONFIG.workflowStatus
+    ),
+    currentAssignedRole: getConfiguredFieldName(
+      configuredFields && configuredFields.currentAssignedRole,
+      DEFAULT_SHAREPOINT_FIELD_CONFIG.currentAssignedRole
+    ),
+    creditManager: getConfiguredFieldName(
+      configuredFields && configuredFields.creditManager,
+      DEFAULT_SHAREPOINT_FIELD_CONFIG.creditManager
+    ),
+    dsr: getConfiguredFieldName(
+      configuredFields && configuredFields.dsr,
+      DEFAULT_SHAREPOINT_FIELD_CONFIG.dsr
+    ),
+    customerService: getConfiguredFieldName(
+      configuredFields && configuredFields.customerService,
+      DEFAULT_SHAREPOINT_FIELD_CONFIG.customerService
+    )
+  };
+};
+
 /**
  * Display names for fields - used for documentation and UI labels
  */
@@ -51,7 +121,6 @@ export const FIELD_DISPLAY_NAMES = {
   [SHAREPOINT_FIELDS.SYSTEM.TITLE]: 'Title',
   [SHAREPOINT_FIELDS.SYSTEM.CREATED]: 'Created',
   [SHAREPOINT_FIELDS.SYSTEM.MODIFIED]: 'Modified',
-  [SHAREPOINT_FIELDS.BASIC.SIMPLE_TITLE]: 'Simple Title',
   [SHAREPOINT_FIELDS.BASIC.WORKFLOW_STATUS]: 'Workflow Status',
   [SHAREPOINT_FIELDS.BASIC.CURRENT_ASSIGNED_ROLE]: 'Current Assigned Role',
   [SHAREPOINT_FIELDS.USERS.CREDIT_MANAGER]: 'Credit Manager',
@@ -86,13 +155,47 @@ export const USER_FIELDS = [
   SHAREPOINT_FIELDS.USERS.CUSTOMER_SERVICE
 ];
 
+export const getConfiguredUserFieldMappings = (
+  configuredFields?: Partial<ISharePointFieldConfig>
+): { internal: string; display: string }[] => {
+  const fields = getSharePointFieldConfig(configuredFields);
+
+  return [
+    {
+      internal: fields.creditManager,
+      display: 'Credit Manager'
+    },
+    {
+      internal: fields.dsr,
+      display: 'District Sales Representative'
+    },
+    {
+      internal: fields.customerService,
+      display: 'Customer Service'
+    }
+  ];
+};
+
+export const getConfiguredUserFields = (
+  configuredFields?: Partial<ISharePointFieldConfig>
+): string[] => {
+  const fields = getSharePointFieldConfig(configuredFields);
+  return [fields.creditManager, fields.dsr, fields.customerService];
+};
+
+const uniqueFields = (fields: string[]): string[] => {
+  return fields.filter(
+    (fieldName, index, allFields) =>
+      fieldName && allFields.indexOf(fieldName) === index
+  );
+};
+
 /**
  * Standard select fields for basic queries
  */
 export const BASIC_SELECT_FIELDS = [
   SHAREPOINT_FIELDS.SYSTEM.ID,
-  SHAREPOINT_FIELDS.BASIC.SIMPLE_TITLE,
-  SHAREPOINT_FIELDS.SYSTEM.TITLE, // Fallback for Simple Title
+  SHAREPOINT_FIELDS.SYSTEM.TITLE,
   SHAREPOINT_FIELDS.BASIC.WORKFLOW_STATUS,
   SHAREPOINT_FIELDS.USERS.CREDIT_MANAGER,
   SHAREPOINT_FIELDS.USERS.DSR,
@@ -101,6 +204,24 @@ export const BASIC_SELECT_FIELDS = [
   SHAREPOINT_FIELDS.SYSTEM.CREATED,
   SHAREPOINT_FIELDS.SYSTEM.MODIFIED
 ];
+
+export const getBasicSelectFields = (
+  configuredFields?: Partial<ISharePointFieldConfig>
+): string[] => {
+  const fields = getSharePointFieldConfig(configuredFields);
+
+  return uniqueFields([
+    fields.id,
+    fields.title,
+    fields.workflowStatus,
+    fields.creditManager,
+    fields.dsr,
+    fields.customerService,
+    fields.currentAssignedRole,
+    fields.created,
+    fields.modified
+  ]);
+};
 
 /**
  * Type definitions for better type safety
@@ -128,24 +249,27 @@ export const getFieldDisplayName = (internalName: string): string => {
 /**
  * Helper function to check if a field is a user field
  */
-export const isUserField = (fieldName: string): boolean => {
+export const isUserField = (
+  fieldName: string,
+  configuredFields?: Partial<ISharePointFieldConfig>
+): boolean => {
+  const fields = getSharePointFieldConfig(configuredFields);
+
   return (
-    fieldName === SHAREPOINT_FIELDS.USERS.CREDIT_MANAGER ||
-    fieldName === SHAREPOINT_FIELDS.USERS.DSR ||
-    fieldName === SHAREPOINT_FIELDS.USERS.CUSTOMER_SERVICE
+    fieldName === fields.creditManager ||
+    fieldName === fields.dsr ||
+    fieldName === fields.customerService
   );
 };
 
 /**
  * Helper function to get user field expansion properties for SharePoint queries
  */
-export const getUserFieldExpansions = (fieldName: string): string[] => {
-  if (!isUserField(fieldName)) return [];
+export const getUserFieldExpansions = (
+  fieldName: string,
+  configuredFields?: Partial<ISharePointFieldConfig>
+): string[] => {
+  if (!isUserField(fieldName, configuredFields)) return [];
 
-  return [
-    `${fieldName}/Id`,
-    `${fieldName}/Title`,
-    `${fieldName}/EMail`,
-    `${fieldName}/Email`
-  ];
+  return [`${fieldName}/Id`, `${fieldName}/Title`, `${fieldName}/EMail`];
 };

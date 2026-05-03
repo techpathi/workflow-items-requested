@@ -1,4 +1,5 @@
 import { WebPartContext } from '@microsoft/sp-webpart-base';
+import { ISharePointFieldConfig } from '../../../constants';
 
 export interface IWorkflowItemsRequestedProps {
   // Web Part Context
@@ -6,6 +7,8 @@ export interface IWorkflowItemsRequestedProps {
 
   // Data Source Settings
   workflowLists: string[]; // Multiple SharePoint lists
+  sharePointFields: ISharePointFieldConfig;
+  createdWithinDays: number;
 
   // User Role Configuration
   userRoles: string[]; // User's current roles ['CM', 'BUYER', etc.]
@@ -34,4 +37,6 @@ export interface IWorkflowItemsRequestedProps {
   // Header Customization
   webpartTitle: string; // Main header title
   showUserContext: boolean; // Show "I am the..." header
+  allowUserRoleEdit: boolean; // Allow end-users to temporarily change their active roles
+  roleDefinitions?: { key: string; text: string }[]; // Structured role definitions (admin-defined)
 }

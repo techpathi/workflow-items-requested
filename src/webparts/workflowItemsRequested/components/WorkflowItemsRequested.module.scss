@@ -1,8 +1,13 @@
 @import '~@fluentui/react/dist/sass/References.scss';
 
 .workflowItemsRequested {
-  overflow: hidden;
+  overflow-x: auto;     /* Show horizontal scrollbar only when content overflows */
+  overflow-y: visible;
   padding: 16px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  display: block;
   // Base text color (Semantic slot with SharePoint theming token fallback)
   color: '[theme:bodyText, default:#323130]';
   font-family: 'Segoe UI', 'Segoe UI Web (West European)', 'Segoe UI',
@@ -127,6 +132,8 @@
 
   // DetailsList Customizations
   :global(.ms-DetailsList) {
+    width: 100%;
+
     // Utility for truncating text inside cells
     .truncateCell {
       display: block;
@@ -136,15 +143,40 @@
       white-space: nowrap;
     }
 
+    // Title cell – prominent, truncates with ellipsis but at a larger base size
+    .titleCell {
+      display: block;
+      width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 14px;
+      font-weight: 500;
+      color: '[theme:neutralPrimary, default:#323130]';
+    }
+
+    // Secondary cells – wraps instead of truncating, smaller font
+    .wrapCell {
+      display: block;
+      width: 100%;
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      font-size: 12px;
+      line-height: 1.35;
+      color: '[theme:neutralSecondary, default:#605e5c]';
+    }
+
     // Header text truncation to avoid overlap with filter icon
     .headerTextTruncate {
       flex: 1 1 auto;
       min-width: 0; // allow shrinking within flex
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+      overflow-wrap: anywhere;
       cursor: pointer;
-      line-height: 1.2;
+      line-height: 1.15;
       display: inline-block;
     }
     // Header styling
@@ -159,6 +191,8 @@
         text-transform: uppercase;
         color: '[theme:neutralPrimary, default:#323130]';
         letter-spacing: 0.5px;
+        height: auto;
+        min-height: 44px;
 
         &:hover {
           background-color: '[theme:neutralLighter, default:#edebe9]';
@@ -167,6 +201,8 @@
 
       :global(.ms-DetailsHeader-cellTitle) {
         font-weight: 600;
+        height: auto;
+        min-height: 44px;
       }
     }
 
@@ -342,7 +378,7 @@
 
 // Dark theme support
 // Dark theme adjustments (leveraging semantic slots & .is-darkTheme class injected by SP)
-.is-darkTheme .workflowItemsRequested,
+:global(.is-darkTheme) .workflowItemsRequested,
 [data-theme='dark'] .workflowItemsRequested {
   color: '[theme:bodyText, default:#f3f2f1]';
 

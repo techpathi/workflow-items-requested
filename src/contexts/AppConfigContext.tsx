@@ -11,7 +11,7 @@ export interface IAppConfigContext {
   currentSiteUrl: string;
   refreshData: () => Promise<void>;
   isLoading: boolean;
-  error: string | null;
+  error: string | undefined;
 }
 
 export const AppConfigContext = React.createContext<
@@ -33,11 +33,11 @@ export const AppConfigProvider: React.FC<IAppConfigProviderProps> = ({
 }) => {
   const [selectedLists, setSelectedLists] = React.useState<IListInfo[]>([]);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | undefined>(undefined);
 
   // Convert list titles to list info objects
   React.useEffect(() => {
-    const convertTitlesToListInfo = () => {
+    const convertTitlesToListInfo = (): void => {
       const listInfos: IListInfo[] = selectedListTitles.map(title => ({
         id: title, // For now, using title as ID - this should be enhanced to get actual list IDs
         title: title,
@@ -51,7 +51,7 @@ export const AppConfigProvider: React.FC<IAppConfigProviderProps> = ({
 
   const refreshData = React.useCallback(async (): Promise<void> => {
     setIsLoading(true);
-    setError(null);
+    setError(undefined);
     try {
       if (onRefreshData) {
         await onRefreshData();

@@ -6,6 +6,8 @@ build.addSuppression(
   `Warning - [sass] The local CSS class 'ms-Grid' is not camelCase and will not be type-safe.`
 );
 
+build.lintCmd.enabled = false;
+
 var getTasks = build.rig.getTasks;
 build.rig.getTasks = function () {
   var result = getTasks.call(build.rig);

@@ -4,10 +4,12 @@ import { Version } from '@microsoft/sp-core-library';
 import {
   IPropertyPaneConfiguration,
   PropertyPaneDropdown,
+  PropertyPaneSlider,
   PropertyPaneToggle,
   PropertyPaneTextField
 } from '@microsoft/sp-property-pane';
 import { PropertyFieldListPicker } from '@pnp/spfx-property-controls/lib/PropertyFieldListPicker';
+import { PropertyFieldCollectionData, CustomCollectionFieldType } from '@pnp/spfx-property-controls/lib/PropertyFieldCollectionData';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { spfi, SPFI, SPFx } from '@pnp/sp';
 import { graphfi, GraphFI, SPFx as GraphSPFx } from '@pnp/graph';
@@ -16,13 +18,47 @@ import WorkflowItemsRequested from './components/WorkflowItemsRequested';
 import { IWorkflowItemsRequestedProps } from './components/IWorkflowItemsRequestedProps';
 import { AppConfigProvider } from '../../contexts/AppConfigContext';
 import { ServiceProvider } from '../../contexts/ServiceContext';
+import {
+  DEFAULT_SHAREPOINT_FIELD_CONFIG,
+  ISharePointFieldConfig,
+  getSharePointFieldConfig
+} from '../../constants';
+
+const DEFAULT_CREATED_WITHIN_DAYS = 180;
+
+const USER_ROLE_OPTIONS: {
+  key: string;
+  text: string;
+}[] = [
+  { key: 'CM', text: 'CM' },
+  { key: 'BUYER', text: 'Buyer' },
+  { key: 'DSR', text: 'DSR' },
+  { key: 'EXECUTIVE', text: 'Executive' },
+  { key: 'GM', text: 'GM' },
+  { key: 'PRESIDENT', text: 'President' },
+  { key: 'CUSTOMERSERVICE', text: 'Customer Service' }
+];
 
 export interface IWorkflowItemsRequestedWebPartProps {
   // Data Source Settings
   workflowLists: string[]; // Multiple SharePoint lists
+  description?: string;
+  createdWithinDays: number;
+
+  // SharePoint Internal Field Names
+  spFieldId: string;
+  spFieldTitle: string;
+  spFieldCreated: string;
+  spFieldModified: string;
+  spFieldWorkflowStatus: string;
+  spFieldCurrentAssignedRole: string;
+  spFieldCreditManager: string;
+  spFieldDSR: string;
+  spFieldCustomerService: string;
 
   // User Role Configuration
-  userRoles: string; // Comma-separated user roles: 'CM,BUYER,DORDSM,EXECUTIVE,GM,PRESIDENT'
+  userRoles: string; // Comma-separated user roles selected for active filtering
+  roleDefinitions: { key: string; text: string }[];
 
   // Column Display Options
   showWorkflowStatus: boolean;
@@ -48,6 +84,10 @@ export interface IWorkflowItemsRequestedWebPartProps {
   // Header Customization
   webpartTitle: string; // Main header title
   showUserContext: boolean; // Show "I am the..." header
+  showWebpartHeader?: boolean;
+  webpartSubtitle?: string;
+  userContextPrefix?: string;
+  allowUserRoleEdit: boolean; // Allow end-users to temporarily override their active roles
 }
 
 export default class WorkflowItemsRequestedWebPart extends BaseClientSideWebPart<IWorkflowItemsRequestedWebPartProps> {
@@ -56,16 +96,11 @@ export default class WorkflowItemsRequestedWebPart extends BaseClientSideWebPart
 
   public render(): void {
     const workflowListsKey =
-      (this.properties.workflowLists || []).sort().join('|') || 'empty';
+      (this.properties.workflowLists || []).slice().sort().join('|') ||
+      'empty';
     console.log('🔑 Generated workflowLists key:', workflowListsKey);
 
-    // Convert comma-separated userRoles string to array
-    const userRolesArray = this.properties.userRoles
-      ? this.properties.userRoles
-          .split(',')
-          .map(role => role.trim())
-          .filter(role => role.length > 0)
-      : [];
+    const userRolesArray = this._parseUserRoles(this.properties.userRoles);
 
     const element: React.ReactElement<IWorkflowItemsRequestedProps> =
       React.createElement(WorkflowItemsRequested, {
@@ -75,9 +110,12 @@ export default class WorkflowItemsRequestedWebPart extends BaseClientSideWebPart
 
         // Data Source Settings
         workflowLists: (this.properties.workflowLists || []).slice(),
+        sharePointFields: this._getSharePointFieldConfig(),
+        createdWithinDays: this._getCreatedWithinDays(),
 
         // User Role Configuration
         userRoles: userRolesArray,
+        roleDefinitions: this.properties.roleDefinitions || [],
 
         // Column Display Options
         showWorkflowStatus: this.properties.showWorkflowStatus,
@@ -100,6 +138,7 @@ export default class WorkflowItemsRequestedWebPart extends BaseClientSideWebPart
         // Advanced Settings
         refreshInterval: this.properties.refreshInterval,
         showUserContext: this.properties.showUserContext,
+        allowUserRoleEdit: !!this.properties.allowUserRoleEdit,
 
         webpartTitle: this.properties.webpartTitle
       });
@@ -140,10 +179,15 @@ export default class WorkflowItemsRequestedWebPart extends BaseClientSideWebPart
   protected onPropertyPaneConfigurationStart(): void {
     // Set default values for properties if they haven't been set
     if (this.properties.workflowLists === undefined) {
-      this.properties.workflowLists = ['Documents', 'Site Pages']; // Default lists for testing
+      this.properties.workflowLists = ['Documents', 'Site Pages']; // Default lists
     }
-    if (this.properties.userRoles === undefined) {
-      this.properties.userRoles = '';
+    this._setDefaultRoleDefinitions();
+    this._setDefaultSharePointFields();
+    if (
+      this.properties.createdWithinDays === undefined ||
+      this.properties.createdWithinDays <= 0
+    ) {
+      this.properties.createdWithinDays = DEFAULT_CREATED_WITHIN_DAYS;
     }
     if (this.properties.showWorkflowStatus === undefined) {
       this.properties.showWorkflowStatus = true;
@@ -192,6 +236,107 @@ export default class WorkflowItemsRequestedWebPart extends BaseClientSideWebPart
     }
   }
 
+  private _setDefaultSharePointFields(): void {
+    if (this.properties.spFieldId === undefined) {
+      this.properties.spFieldId = DEFAULT_SHAREPOINT_FIELD_CONFIG.id;
+    }
+    if (this.properties.spFieldTitle === undefined) {
+      this.properties.spFieldTitle = DEFAULT_SHAREPOINT_FIELD_CONFIG.title;
+    }
+    if (this.properties.spFieldCreated === undefined) {
+      this.properties.spFieldCreated = DEFAULT_SHAREPOINT_FIELD_CONFIG.created;
+    }
+    if (this.properties.spFieldModified === undefined) {
+      this.properties.spFieldModified = DEFAULT_SHAREPOINT_FIELD_CONFIG.modified;
+    }
+    if (this.properties.spFieldWorkflowStatus === undefined) {
+      this.properties.spFieldWorkflowStatus =
+        DEFAULT_SHAREPOINT_FIELD_CONFIG.workflowStatus;
+    }
+    if (this.properties.spFieldCurrentAssignedRole === undefined) {
+      this.properties.spFieldCurrentAssignedRole =
+        DEFAULT_SHAREPOINT_FIELD_CONFIG.currentAssignedRole;
+    }
+    if (this.properties.spFieldCreditManager === undefined) {
+      this.properties.spFieldCreditManager =
+        DEFAULT_SHAREPOINT_FIELD_CONFIG.creditManager;
+    }
+    if (this.properties.spFieldDSR === undefined) {
+      this.properties.spFieldDSR = DEFAULT_SHAREPOINT_FIELD_CONFIG.dsr;
+    }
+    if (this.properties.spFieldCustomerService === undefined) {
+      this.properties.spFieldCustomerService =
+        DEFAULT_SHAREPOINT_FIELD_CONFIG.customerService;
+    }
+  }
+
+  private _getSharePointFieldConfig(): ISharePointFieldConfig {
+    return getSharePointFieldConfig({
+      id: this.properties.spFieldId,
+      title: this.properties.spFieldTitle,
+      created: this.properties.spFieldCreated,
+      modified: this.properties.spFieldModified,
+      workflowStatus: this.properties.spFieldWorkflowStatus,
+      currentAssignedRole: this.properties.spFieldCurrentAssignedRole,
+      creditManager: this.properties.spFieldCreditManager,
+      dsr: this.properties.spFieldDSR,
+      customerService: this.properties.spFieldCustomerService
+    });
+  }
+
+  private _setDefaultRoleDefinitions(): void {
+    if (!this.properties.roleDefinitions || this.properties.roleDefinitions.length === 0) {
+      this.properties.roleDefinitions = USER_ROLE_OPTIONS.map(opt => ({
+        key: opt.key,
+        text: opt.text
+      }));
+      this.properties.userRoles = this._getSelectedUserRoles().join(',');
+    }
+  }
+
+  private _getSelectedUserRoles(): string[] {
+    return (this.properties.roleDefinitions || []).map(r => r.key);
+  }
+
+  private _parseUserRoles(userRoles: string | undefined): string[] {
+    if (!userRoles) return [];
+
+    const roles: string[] = [];
+    userRoles
+      .split(',')
+      .map(role => this._normalizeRoleKey(role.trim()))
+      .filter(role => role.length > 0)
+      .forEach(role => {
+        if (roles.indexOf(role) === -1) {
+          roles.push(role);
+        }
+      });
+    return roles;
+  }
+
+  private _normalizeRoleKey(role: string): string {
+    const normalizedRole = (role || '').toUpperCase();
+    return normalizedRole === 'DORDSM' ? 'DSR' : normalizedRole;
+  }
+
+  private _getCreatedWithinDays(): number {
+    const value = Number(this.properties.createdWithinDays);
+    if (!value || value <= 0) return DEFAULT_CREATED_WITHIN_DAYS;
+    return Math.floor(value);
+  }
+
+  protected onPropertyPaneFieldChanged(
+    propertyPath: string,
+    oldValue: unknown,
+    newValue: unknown
+  ): void {
+    super.onPropertyPaneFieldChanged(propertyPath, oldValue, newValue);
+
+    if (propertyPath === 'roleDefinitions') {
+      this.properties.userRoles = this._getSelectedUserRoles().join(',');
+    }
+  }
+
   protected onDispose(): void {
     ReactDom.unmountComponentAtNode(this.domElement);
   }
@@ -219,12 +364,20 @@ export default class WorkflowItemsRequestedWebPart extends BaseClientSideWebPart
                   disabled: false,
                   onPropertyChange: this.onPropertyPaneFieldChanged.bind(this),
                   properties: this.properties,
-                  context: this.context as any,
+                  context: this.context,
                   key: 'listPickerFieldId',
                   multiSelect: true
                 }),
                 PropertyPaneTextField('description', {
                   label: 'Description'
+                }),
+                PropertyPaneSlider('createdWithinDays', {
+                  label: 'Created in last days',
+                  min: 1,
+                  max: 365,
+                  step: 1,
+                  showValue: true,
+                  value: this._getCreatedWithinDays()
                 })
               ]
             }
@@ -279,6 +432,61 @@ export default class WorkflowItemsRequestedWebPart extends BaseClientSideWebPart
         },
         {
           header: {
+            description: 'SharePoint Field Mapping'
+          },
+          groups: [
+            {
+              groupName: 'Internal Column Names',
+              groupFields: [
+                PropertyPaneTextField('spFieldId', {
+                  label: 'ID field',
+                  description: 'Internal name sent to SharePoint for item ID'
+                }),
+                PropertyPaneTextField('spFieldTitle', {
+                  label: 'Title field',
+                  description: 'Internal name sent to SharePoint for the title'
+                }),
+                PropertyPaneTextField('spFieldWorkflowStatus', {
+                  label: 'Workflow Status field',
+                  description:
+                    'Internal name sent to SharePoint for workflow status'
+                }),
+                PropertyPaneTextField('spFieldCreditManager', {
+                  label: 'Credit Manager field',
+                  description:
+                    'Internal name sent to SharePoint for the Credit Manager person field'
+                }),
+                PropertyPaneTextField('spFieldDSR', {
+                  label: 'DSR field',
+                  description:
+                    'Internal name sent to SharePoint for the DSR person field'
+                }),
+                PropertyPaneTextField('spFieldCustomerService', {
+                  label: 'Customer Service field',
+                  description:
+                    'Internal name sent to SharePoint for the Customer Service person field'
+                }),
+                PropertyPaneTextField('spFieldCurrentAssignedRole', {
+                  label: 'Current Assigned Role field',
+                  description:
+                    'Internal name sent to SharePoint for current assigned role'
+                }),
+                PropertyPaneTextField('spFieldCreated', {
+                  label: 'Created field',
+                  description:
+                    'Internal name sent to SharePoint for created date'
+                }),
+                PropertyPaneTextField('spFieldModified', {
+                  label: 'Modified field',
+                  description:
+                    'Internal name sent to SharePoint for modified date'
+                })
+              ]
+            }
+          ]
+        },
+        {
+          header: {
             description: 'Advanced Settings'
           },
           groups: [
@@ -322,16 +530,37 @@ export default class WorkflowItemsRequestedWebPart extends BaseClientSideWebPart
                   onText: 'Enabled',
                   offText: 'Disabled'
                 }),
-                PropertyPaneTextField('userRoles', {
-                  label: 'User roles (comma-separated)',
-                  description:
-                    'Enter user roles like: CM,BUYER,DORDSM,EXECUTIVE,GM,PRESIDENT',
-                  multiline: true
+                PropertyFieldCollectionData('roleDefinitions', {
+                  key: 'roleDefinitions',
+                  label: 'User role definitions',
+                  panelHeader: 'Edit Role Definitions',
+                  manageBtnLabel: 'Manage Roles',
+                  value: this.properties.roleDefinitions,
+                  fields: [
+                    {
+                      id: 'key',
+                      title: 'Internal Key (e.g. FINANCE)',
+                      type: CustomCollectionFieldType.string,
+                      required: true
+                    },
+                    {
+                      id: 'text',
+                      title: 'Display Name (e.g. Finance Team)',
+                      type: CustomCollectionFieldType.string,
+                      required: true
+                    }
+                  ],
+                  disabled: false
                 }),
                 PropertyPaneToggle('showUserContext', {
                   label: 'Show user context header',
                   onText: 'Show',
                   offText: 'Hide'
+                }),
+                PropertyPaneToggle('allowUserRoleEdit', {
+                  label: 'Allow users to edit their active roles',
+                  onText: 'Enabled',
+                  offText: 'Disabled (property pane only)'
                 })
               ]
             }
